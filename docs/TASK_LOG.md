@@ -77,3 +77,74 @@ a multiplatform dependency to represent dates.
 
 Code review (`/code-review` skill, medium level) → **Approved**, no
 blocking findings.
+
+---
+
+## Task 2: Configure SQLDelight schema for the Transaction table
+
+**Branch/PR:** `task-2-sqldelight-transaction`
+**Commits:** `21cbe75` (SQLDelight dependency + Transaction schema)
+**References:** ADR-002, ADR-007
+
+### Summary
+
+Set up SQLDelight in `:shared` and defined the initial schema to persist
+transactions. Added the plugin and the `runtime` library (version `2.3.2`) to
+the version catalog, wired the plugin into the root and `:shared` build scripts,
+configured the `EasySavingDatabase` database
+(`packageName = com.ortsinton.easysaving.data.local.sqldelight`), and created
+`TransactionEntity.sq` with the `CREATE TABLE` plus the basic queries
+(`insert`, `selectAll`, `selectById`, `update`, `deleteById`).
+
+### Decisions made
+
+- **Table named `TransactionEntity`, not `Transaction`.** Two reasons:
+  `TRANSACTION` is a reserved SQL keyword (`BEGIN TRANSACTION`), and it avoids a
+  name clash with the `domain.model.Transaction` class when both are imported in
+  the data-layer mappers.
+- **Columns follow ADR-007.** `Long` autoincrement `id`; amount stored as
+  `amountCents INTEGER` (matching the `Money` value class); `date` as an
+  ISO-8601 `TEXT` (`LocalDate`); category referenced by `categoryId`, never
+  embedded.
+- **`verifyMigrations = true` enabled from the start.** It is a no-op today
+  (schema v1 has no `.sqm` migration files yet), but wires in real, versioned
+  migration verification as required by ADR-002: once `.sqm` files exist
+  (schema v2+), Gradle checks that applying them reproduces the schema defined
+  by the `.sq` files, so drift can't ship unnoticed.
+- **Scope limited to `Transaction`.** The ticket asked specifically for
+  `Transaction.sq`; the `Category` table is deferred to its own ticket.
+
+### Problems / clarifications during implementation
+
+- **`INTEGER` vs overflow.** Concern was raised that storing the amount as
+  `INTEGER` could overflow the domain's `Long`. It cannot: SQLite has no
+  fixed-width integer types — its `INTEGER` storage class holds up to 8 bytes
+  (signed 64-bit), exactly the range of a Kotlin `Long`, and SQLDelight maps it
+  to `Long` (confirmed in the generated `amountCents: Long`). `NUMBER` was
+  rejected: it would get `NUMERIC` affinity and map to `Double`, precisely what
+  ADR-007 forbids for money.
+- **No local JDK on PATH.** `java`/`gradle` weren't available directly; builds
+  were run using the JBR bundled with Android Studio
+  (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`) as
+  `JAVA_HOME`.
+
+### Verification
+
+- `TransactionEntity.sq` generates `TransactionEntity`,
+  `TransactionEntityQueries` and `EasySavingDatabase`; generated `amountCents`
+  is `Long` and `Schema.version = 1` (schema v1).
+- Compiles for all targets: Android AAR (`:shared:assemble`) and both iOS
+  frameworks (`compileKotlinIosArm64`, `compileKotlinIosSimulatorArm64`).
+
+### Follow-up generated (not resolved in this task)
+
+- **Runtime wiring (next ticket).** Only `sqldelight:runtime` was added, which
+  is enough to generate code and compile but does **not** create the database or
+  run `CREATE TABLE` at runtime. Still pending: platform drivers
+  (`android-driver` in `androidMain`, `native-driver` in `iosMain`), an
+  `expect/actual DriverFactory` (Android needs a `Context`, iOS doesn't), the
+  `EasySavingDatabase.kt` wrapper, and Koin wiring. The driver constructor is
+  what invokes `Schema.create()`.
+- Still pending from Task 1: **"Clean up Compose Multiplatform scaffolding in
+  `:shared`"** (remove `App.kt`, `Greeting.kt`, `GreetingUtil.kt`, `Platform.kt`
+  and the Compose dependencies), which contradicts ADR-001.
