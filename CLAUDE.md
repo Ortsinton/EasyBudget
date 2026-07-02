@@ -1,73 +1,87 @@
-# EasySaving — Contexto de proyecto para Claude Code
+# EasySaving — Project Context for Claude Code
 
-Este fichero se lee automaticamente al inicio de cada sesion de Claude Code.
-Contiene el contexto minimo necesario para trabajar en cualquier tarea del
-proyecto sin tener que reexplicar la arquitectura en cada chat.
+This file is read automatically at the start of every Claude Code session.
+It contains the minimum context needed to work on any project task without
+having to re-explain the architecture in every chat.
 
-## Que es EasySaving
+## What EasySaving is
 
-App de finanzas personales (budgeting) desarrollada como proyecto de
-portfolio. Permite registrar gastos/ingresos y visualizar analiticas
-(por categoria, por fecha, tendencias). Proyecto KMP con Android (Compose)
-e iOS (SwiftUI) nativos, compartiendo domain, data y presentation.
+Personal finance (budgeting) app built as a portfolio project. Lets users
+record expenses/income and view analytics (by category, by date, trends).
+KMP project with native Android (Compose) and iOS (SwiftUI), sharing
+domain, data and presentation.
 
-Documentacion completa de decisiones y estructura:
-- `docs/ADR.md` — decisiones de arquitectura con contexto y trade-offs
-- `docs/PROJECT_STRUCTURE.md` — estructura de modulos y convenciones
+Full documentation of decisions and structure:
+- `docs/ADR.md` — architecture decisions with context and trade-offs
+- `docs/PROJECT_STRUCTURE.md` — module structure and conventions
+- `docs/TASK_LOG.md` — history of completed tasks: what was decided, what
+  problems came up, and what follow-up was left pending on each one. Read
+  the most recent entry before starting a new task.
 
-## Stack tecnico
+## Tech stack
 
 - Kotlin Multiplatform (targets: android, iosArm64, iosSimulatorArm64)
-- Persistencia local: SQLDelight (offline-first, sin backend)
+- Local persistence: SQLDelight (offline-first, no backend)
 - DI: Koin
 - Async: Coroutines + Flow
-- Interoperabilidad Swift: SKIE
-- UI: Jetpack Compose (Android) y SwiftUI moderno con @Observable (iOS 17+)
-- Testing compartido: kotlin.test + Turbine
+- Swift interop: SKIE
+- UI: Jetpack Compose (Android) and modern SwiftUI with @Observable (iOS 17+)
+- Shared testing: kotlin.test + Turbine
 - CI: GitHub Actions
 
-## Frontera de compartición (regla mas importante)
+## Sharing boundary (most important rule)
 
-- **Compartido:** domain (modelos, casos de uso), data (repositorios,
-  SQLDelight), presentation (ViewModels)
-- **Nativo:** UI completa (Compose / SwiftUI), navegacion, graficos
+- **Shared:** domain (models, use cases), data (repositories, SQLDelight),
+  presentation (ViewModels)
+- **Native:** full UI (Compose / SwiftUI), navigation, charts
 
-Los ViewModels compartidos NUNCA navegan. Exponen:
-- Un `StateFlow<UiState>` con el estado a renderizar
-- Funciones de accion (ej. `onTransactionSelected(id)`) que solo notifican
-  intencion; cada plataforma decide si eso implica navegar y como
+Shared ViewModels NEVER navigate. They expose:
+- A `StateFlow<UiState>` with the state to render
+- Action functions (e.g. `onTransactionSelected(id)`) that only notify
+  intent; each platform decides whether that means navigating and how
 
-Ver ADR-003 y ADR-004 para el detalle completo y el porque de esta decision.
+See ADR-003 and ADR-004 for the full detail and the reasoning behind this
+decision.
 
-## Convenciones de codigo
+## Code conventions
 
-- Paquetes: `com.ortsinton.easysaving.domain`, `com.ortsinton.easysaving.data`,
+- Packages: `com.ortsinton.easysaving.domain`, `com.ortsinton.easysaving.data`,
   `com.ortsinton.easysaving.presentation`, `com.ortsinton.easysaving.di`
-- `shared/domain` no puede importar nada de Android, iOS ni SQLDelight
-- `shared/presentation` no puede importar tipos de SQLDelight directamente
-  (siempre pasa por domain)
-- Toda logica de negocio (calculos, validaciones, agregaciones) vive en
-  domain, nunca en un ViewModel ni en un Composable/View
+- `shared/domain` must not import anything from Android, iOS or SQLDelight
+- `shared/presentation` must not import SQLDelight types directly (always
+  go through domain)
+- All business logic (calculations, validation, aggregations) lives in
+  domain, never in a ViewModel or a Composable/View
+- Domain entity modeling conventions (`Long` auto-increment IDs, no UUID;
+  relationships by id, not embedded objects; dates with `kotlinx-datetime`;
+  amounts as a `value class` over `Long` in cents; icon/color as `String`):
+  see ADR-007 before creating a new entity
+- Documentation, code comments, commit messages and PR descriptions are
+  written in English — this repo is meant to be read by contributors
+  worldwide. Conversation between the user and Claude Code stays in
+  whichever language the user uses in chat (normally Spanish); this rule
+  only applies to what gets committed to the repo.
 
-## Flujo de trabajo por tarea
+## Task workflow
 
-1. Cada tarea viene de una tarjeta de Trello (tablero EasySaving, lista
-   "To Do") con Objetivo + Criterios de aceptacion + Referencias a ADR.
-2. Crea una rama nueva por tarea: `task-N-nombre-corto`
-3. Al terminar, verifica que el proyecto compila para ambos targets y que
-   los tests pasan
-4. Commit descriptivo referenciando la tarea, ej:
-   `feat: definir modelos de dominio de dominio (Transaction, Category, Money)`
-5. El progreso entre sesiones se seduce del codigo y el historial de git,
-   no de conversaciones anteriores — cada sesion de Claude Code empieza sin
-   memoria de sesiones previas, por eso este fichero y el codigo son la
-   unica fuente de verdad
+1. Each task comes from a Trello card (EasySaving board, "To Do" list) with
+   Objective + Acceptance criteria + ADR references.
+2. Create a new branch per task: `task-N-short-name`
+3. When done, verify the project builds for both targets and tests pass
+4. Descriptive commit referencing the task, e.g.:
+   `feat: define domain models (Transaction, Category, Money)`
+5. Progress between sessions is inferred from the code and git history, not
+   from previous conversations — every Claude Code session starts with no
+   memory of previous sessions, which is why this file, the code and
+   `docs/TASK_LOG.md` are the single source of truth. When a task is
+   finished, add a new entry to `docs/TASK_LOG.md` following the same
+   format as the previous ones.
 
-## Que NO hacer
+## What NOT to do
 
-- No compartir UI entre plataformas (nada de Compose Multiplatform):
-  el objetivo del proyecto es demostrar dominio nativo de ambos toolkits
-- No meter navegacion dentro de un ViewModel compartido
-- No anadir features fuera del MVP (presupuestos, multi-cuenta,
-  multi-moneda, sync remoto) salvo que se pida explicitamente — estan
-  documentadas como roadmap futuro en el ADR
+- No sharing UI across platforms (no Compose Multiplatform): the project's
+  goal is to demonstrate native mastery of both toolkits
+- No navigation inside a shared ViewModel
+- No features outside the MVP (budgets, multi-account, multi-currency,
+  remote sync) unless explicitly requested — they're documented as future
+  roadmap in the ADR

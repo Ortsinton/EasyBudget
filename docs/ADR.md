@@ -1,145 +1,202 @@
 # EasySaving — Architecture Decision Records
 
-Este documento recoge las decisiones de arquitectura tomadas en la fase de diseño
-del proyecto, con su contexto y los trade-offs considerados. Se actualizará según
-evolucione el proyecto.
+This document collects the architecture decisions made during the design
+phase of the project, with their context and the trade-offs considered.
+It will be updated as the project evolves.
 
 ---
 
-## ADR-001: Kotlin Multiplatform como estrategia de compartición de código
+## ADR-001: Kotlin Multiplatform as the code-sharing strategy
 
-**Contexto:** El objetivo del proyecto es doble: servir de pieza de portfolio y
-como vehículo de aprendizaje de KMP, Jetpack Compose moderno y SwiftUI moderno,
-manteniendo dominio nativo real de ambas plataformas.
+**Context:** The project has a dual goal: to serve as a portfolio piece and
+as a vehicle for learning KMP, modern Jetpack Compose and modern SwiftUI,
+while maintaining genuine native mastery of both platforms.
 
-**Decisión:** Compartir domain, data y presentation (ViewModels) vía KMP. Mantener
-la capa de UI 100% nativa (Jetpack Compose en Android, SwiftUI en iOS).
+**Decision:** Share domain, data and presentation (ViewModels) via KMP.
+Keep the UI layer 100% native (Jetpack Compose on Android, SwiftUI on iOS).
 
-**Alternativas consideradas:**
-- Compose Multiplatform (compartir también UI): descartado porque diluiría la
-  demostración de dominio nativo de SwiftUI, que es uno de los objetivos
-  explícitos del proyecto.
-- Apps 100% nativas independientes (sin KMP): descartado porque no cumpliría el
-  objetivo de practicar compartición de lógica de negocio.
+**Alternatives considered:**
+- Compose Multiplatform (also sharing UI): rejected because it would dilute
+  the demonstration of native SwiftUI mastery, which is one of the project's
+  explicit goals.
+- Fully independent native apps (no KMP): rejected because it wouldn't meet
+  the goal of practicing business logic sharing.
 
-**Consecuencias:** Mayor complejidad de build (dos toolchains, targets iOS/Android
-en Gradle) a cambio de una demostración más completa de criterio arquitectónico:
-qué se comparte y qué no, y por qué.
-
----
-
-## ADR-002: SQLDelight como capa de persistencia local
-
-**Contexto:** Se necesita una base de datos local, offline-first, accesible desde
-Kotlin compartido y disponible en ambas plataformas.
-
-**Decisión:** SQLDelight.
-
-**Alternativas consideradas:**
-- **Room (KMP):** ya soporta multiplatform, pero con menor recorrido en
-  producción multiplataforma que SQLDelight a día de hoy. Además, SQLDelight
-  genera APIs type-safe a partir de SQL explícito, lo cual demuestra manejo de
-  SQL real (útil de cara a entrevista) en vez de abstraerlo completamente.
-
-**Consecuencias:** Se gestionan migraciones de esquema versionadas manualmente
-mediante los ficheros `.sqm` de SQLDelight — se documentará como punto fuerte de
-portfolio (gestión de migraciones real, no solo un "modelo v1 hardcodeado").
+**Consequences:** Higher build complexity (two toolchains, iOS/Android
+targets in Gradle) in exchange for a more complete demonstration of
+architectural judgment: what gets shared, what doesn't, and why.
 
 ---
 
-## ADR-003: ViewModels compartidos en KMP (no solo domain/data)
+## ADR-002: SQLDelight as the local persistence layer
 
-**Contexto:** El ViewModel es, por definición, agnóstico de cómo se renderiza la
-UI: decide qué se debe presentar, no cómo. Esto lo hace, en principio, apto para
-compartición multiplataforma, más allá de domain y data.
+**Context:** We need a local, offline-first database, accessible from
+shared Kotlin and available on both platforms.
 
-**Decisión:** Compartir los ViewModels usando `androidx.lifecycle.ViewModel`
-(multiplatform), exponiendo estado observable (`StateFlow`) y funciones de acción
-(intents). La navegación queda excluida explícitamente de esta capa (ver ADR-004).
+**Decision:** SQLDelight.
 
-**Problemas identificados y solución adoptada:**
+**Alternatives considered:**
+- **Room (KMP):** already supports multiplatform, but with less production
+  multiplatform track record than SQLDelight today. Also, SQLDelight
+  generates type-safe APIs from explicit SQL, which demonstrates real SQL
+  handling (useful for interviews) instead of fully abstracting it away.
 
-1. **Interoperabilidad `StateFlow` → Swift.** `Flow` no es idiomático en Swift.
-   Se usa el plugin **SKIE** (Touchlab) para generar automáticamente
-   equivalentes `async/await` y tipos Swift-friendly desde las coroutines/Flow
-   expuestas por el ViewModel compartido.
-
-2. **Ciclo de vida en iOS.** `ViewModelStoreOwner` no existe de forma nativa en
-   iOS. El ciclo de vida de cada ViewModel compartido se gestiona explícitamente
-   ligado al ciclo de vida de la `View` de SwiftUI (creación/liberación en
-   `onAppear`/`onDisappear` o contenedor equivalente), evitando fugas de memoria
-   por ViewModels no liberados.
-
-3. **Puente hacia `@Observable` (SwiftUI moderno, iOS 17+).** Se implementa una
-   clase Swift `@Observable` que se suscribe al `StateFlow` compartido (vía SKIE)
-   y republica los cambios como propiedades observables nativas, permitiendo que
-   las Views de SwiftUI usen el patrón de reactividad idiomático de Swift en
-   lugar de observar un `Flow` directamente.
-
-**Alternativas consideradas:**
-- ViewModel nativo por plataforma, consumiendo únicamente los casos de uso
-  compartidos: más simple y "seguro", pero duplica lógica de presentación
-  (mapeo de estado, gestión de loading/error) en ambas plataformas.
-
-**Consecuencias:** Mayor inversión inicial en el puente de interoperabilidad
-(Sprint 1), a cambio de eliminar duplicación de lógica de presentación entre
-plataformas y demostrar manejo de los problemas reales de compartir estado
-reactivo entre paradigmas de UI distintos.
+**Consequences:** Schema migrations are managed manually and versioned via
+SQLDelight's `.sqm` files — this will be documented as a portfolio strength
+(real migration management, not just a "hardcoded v1 model").
 
 ---
 
-## ADR-004: Navegación 100% nativa, fuera del alcance de KMP
+## ADR-003: Shared ViewModels in KMP (not just domain/data)
 
-**Contexto:** La navegación es fuertemente dependiente del framework de UI
-(`NavHost`/`NavController` en Compose vs `NavigationStack`/`NavigationPath` en
-SwiftUI), y no existe una abstracción común madura que no termine forzando el
-paradigma de una plataforma sobre la otra.
+**Context:** The ViewModel is, by definition, agnostic of how the UI is
+rendered: it decides *what* should be presented, not *how*. This makes it,
+in principle, suitable for multiplatform sharing, beyond domain and data.
 
-**Decisión:** El ViewModel compartido nunca navega ni conoce el grafo de
-navegación. Expone únicamente funciones de acción (p. ej. `onTransactionSelected`)
-que notifican una intención; cada plataforma decide, de forma nativa, si eso se
-traduce en una navegación y cómo.
+**Decision:** Share ViewModels using `androidx.lifecycle.ViewModel`
+(multiplatform), exposing observable state (`StateFlow`) and action
+functions (intents). Navigation is explicitly excluded from this layer
+(see ADR-004).
 
-**Consecuencias:** Se mantiene la superficie de UI (incluida la navegación) como
-demostración de dominio nativo idiomático en cada plataforma. Si en el futuro se
-necesita evitar renavegaciones duplicadas en recomposición, se evaluará añadir un
-canal de eventos de un solo uso (`SharedFlow`) — pendiente, no implementado en el
-MVP.
+**Problems identified and the solution adopted:**
 
----
+1. **`StateFlow` → Swift interop.** `Flow` isn't idiomatic in Swift. We use
+   the **SKIE** plugin (Touchlab) to automatically generate `async/await`
+   equivalents and Swift-friendly types from the coroutines/Flow exposed by
+   the shared ViewModel.
 
-## ADR-005: Koin como framework de inyección de dependencias
+2. **Lifecycle on iOS.** `ViewModelStoreOwner` doesn't exist natively on
+   iOS. Each shared ViewModel's lifecycle is explicitly tied to the
+   lifecycle of the SwiftUI `View` (created/released in
+   `onAppear`/`onDisappear` or an equivalent container), avoiding memory
+   leaks from ViewModels that never get released.
 
-**Contexto:** Se necesita DI funcional en Kotlin compartido y consumible desde
-Android e iOS.
+3. **Bridge to `@Observable` (modern SwiftUI, iOS 17+).** A Swift
+   `@Observable` class is implemented that subscribes to the shared
+   `StateFlow` (via SKIE) and republishes changes as native observable
+   properties, letting SwiftUI Views use Swift's idiomatic reactivity
+   pattern instead of observing a `Flow` directly.
 
-**Decisión:** Koin.
+**Alternatives considered:**
+- Native per-platform ViewModel, consuming only the shared use cases:
+  simpler and "safer", but duplicates presentation logic (state mapping,
+  loading/error handling) on both platforms.
 
-**Alternativas consideradas:**
-- Hilt: sin soporte multiplatform (limitado a Android/JVM), descartado por
-  incompatibilidad directa con el objetivo de compartir domain/data/presentation.
-
-**Consecuencias:** Configuración de módulos Koin compartida, con puntos de
-entrada específicos por plataforma para inicializar el grafo de dependencias
-desde `Application` (Android) y desde el punto de arranque de la app (iOS).
-
----
-
-## ADR-006: Alcance del MVP — exclusión de presupuestos y sincronización remota
-
-**Contexto:** El proyecto se desarrolla en paralelo a una búsqueda activa de
-empleo, con disponibilidad de ~20-25h semanales.
-
-**Decisión:** El MVP se limita a CRUD de transacciones, categorías y analíticas
-locales (offline-first). Presupuestos con alertas, multi-cuenta, multi-moneda y
-sincronización remota quedan fuera del MVP, documentados como roadmap futuro.
-
-**Consecuencias:** Permite alcanzar un estado "presentable" en un plazo acotado
-(~6 semanas) sin comprometer la profundidad de la demostración arquitectónica
-en el núcleo del proyecto (KMP, Clean Architecture, testing, CI/CD).
+**Consequences:** Higher upfront investment in the interop bridge
+(Sprint 1), in exchange for eliminating presentation-logic duplication
+across platforms and demonstrating how to solve the real problems of
+sharing reactive state between different UI paradigms.
 
 ---
 
-*Próximas decisiones pendientes de documentar (a añadir cuando se resuelvan):*
-- *Estrategia de eventos de un solo uso para navegación (si se adopta).*
-- *Estrategia de testing de UI en SwiftUI (XCTest vs Snapshot testing).*
+## ADR-004: 100% native navigation, out of KMP's scope
+
+**Context:** Navigation is heavily dependent on the UI framework
+(`NavHost`/`NavController` in Compose vs `NavigationStack`/`NavigationPath`
+in SwiftUI), and there's no mature common abstraction that doesn't end up
+forcing one platform's paradigm onto the other.
+
+**Decision:** The shared ViewModel never navigates and never knows about
+the navigation graph. It only exposes action functions (e.g.
+`onTransactionSelected`) that notify an intent; each platform natively
+decides whether that translates into navigation and how.
+
+**Consequences:** The UI surface (including navigation) is kept as a
+demonstration of idiomatic native mastery on each platform. If avoiding
+duplicate re-navigation on recomposition becomes necessary in the future,
+adding a one-shot event channel (`SharedFlow`) will be evaluated — pending,
+not implemented in the MVP.
+
+---
+
+## ADR-005: Koin as the dependency injection framework
+
+**Context:** We need working DI in shared Kotlin, consumable from both
+Android and iOS.
+
+**Decision:** Koin.
+
+**Alternatives considered:**
+- Hilt: no multiplatform support (limited to Android/JVM), rejected due to
+  a direct incompatibility with the goal of sharing domain/data/presentation.
+
+**Consequences:** Shared Koin module configuration, with platform-specific
+entry points to initialize the dependency graph from `Application`
+(Android) and from the app's startup point (iOS).
+
+---
+
+## ADR-006: MVP scope — excluding budgets and remote sync
+
+**Context:** The project is developed alongside an active job search, with
+availability of ~20-25h/week.
+
+**Decision:** The MVP is limited to CRUD for transactions, categories and
+local analytics (offline-first). Budgets with alerts, multi-account,
+multi-currency and remote sync are out of the MVP, documented as future
+roadmap.
+
+**Consequences:** Lets the project reach a "presentable" state within a
+bounded timeframe (~6 weeks) without compromising the depth of the
+architectural demonstration at the project's core (KMP, Clean Architecture,
+testing, CI/CD).
+
+---
+
+## ADR-007: Domain entity modeling conventions
+
+**Context:** While implementing the first domain models (`Transaction`,
+`Category`, `Money`, task 1), several modeling decisions came up that
+weren't covered by earlier ADRs. Since these decisions will shape the
+structure of every future domain entity (for example, if `Budget` were
+added later), they're documented here as an explicit convention rather
+than left implicit in the code.
+
+**Decision:** Every entity in `shared/domain` follows these conventions
+unless a later ADR documents a justified exception:
+
+1. **Identifiers:** auto-increment `Long` (via `INTEGER PRIMARY KEY
+   AUTOINCREMENT` in SQLDelight), not UUID. The problem UUID solves
+   (ID collisions between syncing devices) doesn't exist in the MVP, which
+   is offline-first and single-device (see ADR-006).
+2. **Relationships between entities:** referenced by id (e.g.
+   `Transaction.categoryId: Long`), never by embedding the full object
+   (`Transaction.category: Category`). Domain mirrors the normalization of
+   a relational schema. "Enriched" views (entity + resolved relationship,
+   meant for UI) are the responsibility of `presentation`/`data`, not the
+   base domain entity.
+3. **Dates:** the `kotlinx-datetime` library exclusively (never
+   `java.util.Date` or `Foundation.Date`, which would break domain's
+   purity from ADR-001). `LocalDate` for business dates (e.g. an expense's
+   date). If stable ordering between same-date entities is ever needed,
+   add a separate field (`createdAt: Instant`) instead of mixing
+   granularities in the same field.
+4. **Amounts:** a `value class` backed by `Long` in the currency's smallest
+   unit (cents), never `Double`, to avoid floating-point rounding errors in
+   financial calculations.
+5. **Icon and color:** represented as `String` (a semantic key for icon, hex
+   for color), never as platform types (`Bitmap`, `UIColor`, Compose
+   `Color`). Each platform decides how to natively render that key, in
+   line with ADR-004's principle that each platform resolves the "how" of
+   the UI.
+
+**Alternatives considered:**
+- UUID for IDs: rejected per point 1 — will be revisited if remote sync is
+  added to the roadmap.
+- Embedding related objects directly instead of referencing by ID: rejected
+  per point 2 — keeps the base model simple and avoids inconsistencies
+  between the embedded object and what's actually persisted.
+- `Double` for amounts: rejected per point 4 — well-known precision errors
+  of binary floating point.
+
+**Consequences:** Any new domain entity must be evaluated against these
+five conventions before being implemented. If a future task needs to
+deviate (for example, multi-currency would require revisiting point 4),
+the deviation must be documented as an update to this ADR, not as a silent
+exception in the code.
+
+---
+
+*Upcoming decisions still to document (to be added once resolved):*
+- *One-shot event strategy for navigation (if adopted).*
+- *SwiftUI UI testing strategy (XCTest vs snapshot testing).*

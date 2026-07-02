@@ -1,30 +1,30 @@
-# EasySaving — Estructura de Módulos (Esqueleto)
+# EasySaving — Module Structure (Skeleton)
 
-Estructura de carpetas y módulos Gradle propuesta para el proyecto. Este
-documento define **qué existe y su responsabilidad**, no su implementación.
-Sirve como guía para el Sprint 0.
+Proposed Gradle module and folder structure for the project. This document
+defines **what exists and its responsibility**, not its implementation. It
+serves as a guide for Sprint 0.
 
 ```
 EasySaving/
 │
-├── shared/                              # Todo el código Kotlin compartido (KMP)
+├── shared/                              # All shared Kotlin code (KMP)
 │   ├── build.gradle.kts                 # Targets: android, iosArm64, iosSimulatorArm64
 │   │
-│   ├── domain/                          # Módulo :shared:domain
+│   ├── domain/                          # Module :shared:domain
 │   │   ├── model/                       # Transaction, Category, Money, etc.
 │   │   ├── repository/                  # Interfaces (TransactionRepository, CategoryRepository)
 │   │   └── usecase/                     # AddTransactionUseCase, GetMonthlyAnalyticsUseCase...
-│   │       # Sin dependencias de Android/iOS ni de frameworks de infraestructura.
-│   │       # 100% testeable con kotlin.test puro.
+│   │       # No dependencies on Android/iOS or infrastructure frameworks.
+│   │       # 100% testable with plain kotlin.test.
 │   │
-│   ├── data/                            # Módulo :shared:data
+│   ├── data/                            # Module :shared:data
 │   │   ├── local/
-│   │   │   ├── sqldelight/              # Ficheros .sq (esquema + queries)
-│   │   │   └── EasySavingDatabase.kt    # Wrapper de acceso a la DB generada
+│   │   │   ├── sqldelight/              # .sq files (schema + queries)
+│   │   │   └── EasySavingDatabase.kt    # Wrapper around the generated DB access
 │   │   ├── mapper/                      # Entity (SQLDelight) <-> Domain model
-│   │   └── repository/                  # Implementaciones de las interfaces de domain
+│   │   └── repository/                  # Implementations of the domain interfaces
 │   │
-│   ├── presentation/                    # Módulo :shared:presentation
+│   ├── presentation/                    # Module :shared:presentation
 │   │   ├── transactionlist/
 │   │   │   ├── TransactionListViewModel.kt
 │   │   │   └── TransactionListUiState.kt
@@ -34,44 +34,45 @@ EasySaving/
 │   │   └── analytics/
 │   │       ├── AnalyticsViewModel.kt
 │   │       └── AnalyticsUiState.kt
-│   │       # Cada ViewModel expone StateFlow<UiState> + funciones de acción.
-│   │       # Cero referencias a navegación (ver ADR-004).
+│   │       # Each ViewModel exposes StateFlow<UiState> + action functions.
+│   │       # Zero references to navigation (see ADR-004).
 │   │
-│   └── di/                              # Módulos Koin compartidos
+│   └── di/                              # Shared Koin modules
 │       └── SharedModule.kt
 │
-├── androidApp/                          # Módulo :androidApp
+├── androidApp/                          # Module :androidApp
 │   ├── build.gradle.kts
 │   └── src/main/kotlin/.../
-│       ├── EasySavingApplication.kt     # Punto de arranque de Koin en Android
+│       ├── EasySavingApplication.kt     # Koin startup entry point on Android
 │       ├── navigation/                  # NavHost + NavGraph (Compose Navigation)
 │       └── ui/
-│           ├── transactionlist/         # Composables que consumen TransactionListViewModel
+│           ├── transactionlist/         # Composables consuming TransactionListViewModel
 │           ├── transactionform/
-│           └── analytics/               # Composables + gráficos (Vico u otra lib)
+│           └── analytics/               # Composables + charts (Vico or another lib)
 │
-├── iosApp/                              # Proyecto Xcode
+├── iosApp/                              # Xcode project
 │   ├── iosApp.xcodeproj
 │   └── iosApp/
-│       ├── EasySavingApp.swift          # Punto de arranque de Koin en iOS
+│       ├── EasySavingApp.swift          # Koin startup entry point on iOS
 │       ├── Navigation/                  # NavigationStack + NavigationPath
-│       ├── Bridges/                     # Puentes @Observable <-> StateFlow (ver ADR-003)
+│       ├── Bridges/                     # @Observable <-> StateFlow bridges (see ADR-003)
 │       │   ├── ObservableTransactionListViewModel.swift
 │       │   ├── ObservableTransactionFormViewModel.swift
 │       │   └── ObservableAnalyticsViewModel.swift
 │       └── Views/
 │           ├── TransactionList/
 │           ├── TransactionForm/
-│           └── Analytics/               # Vistas + Swift Charts
+│           └── Analytics/               # Views + Swift Charts
 │
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                       # Matriz: test :shared (JVM+iOS simulator),
+│       └── ci.yml                       # Matrix: test :shared (JVM+iOS simulator),
 │                                         # build androidApp, build iosApp
 │
 ├── docs/
-│   ├── ADR.md                           # Este documento de decisiones
-│   └── screenshots/                     # Capturas/gifs para el README
+│   ├── ADR.md                           # This decision-record document
+│   ├── TASK_LOG.md                      # Log of completed tasks and follow-up
+│   └── screenshots/                     # Captures/gifs for the README
 │
 ├── settings.gradle.kts                  # include(":shared", ":shared:domain",
 │                                         #         ":shared:data", ":shared:presentation",
@@ -79,24 +80,24 @@ EasySaving/
 └── README.md
 ```
 
-## Notas sobre dependencias entre módulos
+## Notes on module dependencies
 
 ```
-:shared:domain        <-- no depende de nada dentro del proyecto
-:shared:data          <-- depende de :shared:domain
-:shared:presentation  <-- depende de :shared:domain (usa los casos de uso)
-                          NO depende de :shared:data directamente (pasa por domain)
-:shared:di            <-- conecta data + domain + presentation (grafo Koin)
-:androidApp           <-- depende de :shared:presentation, :shared:di
-iosApp (vía framework)<-- consume el binario compilado de :shared (todas las capas)
+:shared:domain        <-- depends on nothing else in the project
+:shared:data          <-- depends on :shared:domain
+:shared:presentation  <-- depends on :shared:domain (uses the use cases)
+                          does NOT depend on :shared:data directly (goes through domain)
+:shared:di            <-- wires data + domain + presentation (Koin graph)
+:androidApp           <-- depends on :shared:presentation, :shared:di
+iosApp (via framework)<-- consumes the compiled :shared binary (all layers)
 ```
 
-Esta separación fuerza que `presentation` nunca conozca detalles de
-persistencia (SQLDelight), y que `domain` permanezca puro — es la frontera que
-se puede señalar directamente en una entrevista para hablar de Clean
-Architecture con un ejemplo real, no solo teórico.
+This separation forces `presentation` to never know persistence details
+(SQLDelight), and keeps `domain` pure — it's the boundary you can point to
+directly in an interview to talk about Clean Architecture with a real
+example, not just a theoretical one.
 
-## Convenciones de nombres de paquete
+## Package naming conventions
 
 ```
 com.ortsinton.easysaving.domain.model
@@ -107,16 +108,16 @@ com.ortsinton.easysaving.presentation.transactionlist
 com.ortsinton.easysaving.di
 ```
 
-## Próximo paso técnico (Sprint 0)
+## Next technical step (Sprint 0)
 
-1. Crear el proyecto KMP (vía plantilla oficial de KMP o `kmp-nativecoroutines`
-   template) con los targets `android`, `iosArm64`, `iosSimulatorArm64`.
-2. Configurar SQLDelight en `:shared:data` con un esquema mínimo (una tabla
-   `Transaction`) y verificar que genera código para ambos targets.
-3. Configurar Koin con un módulo vacío inyectable desde `androidApp` y desde
+1. Create the KMP project (via the official KMP template or the
+   `kmp-nativecoroutines` template) with the `android`, `iosArm64`,
+   `iosSimulatorArm64` targets.
+2. Set up SQLDelight in `:shared:data` with a minimal schema (a single
+   `Transaction` table) and verify it generates code for both targets.
+3. Set up Koin with an empty module injectable from `androidApp` and from
    `iosApp`.
-4. Configurar GitHub Actions con un job que compile `:shared` para ambos
-   targets y corra un test dummy en verde.
-5. Confirmar que el pipeline SKIE está integrado y genera interoperabilidad
-   Swift a partir de un `Flow` de prueba antes de escribir el primer
-   ViewModel real (Sprint 1).
+4. Set up GitHub Actions with a job that builds `:shared` for both targets
+   and runs a green dummy test.
+5. Confirm the SKIE pipeline is integrated and generates Swift interop from
+   a test `Flow` before writing the first real ViewModel (Sprint 1).
